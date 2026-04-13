@@ -1,0 +1,6 @@
+upstream/
+.env
+.docker_volumes/
+.idea/
+.vscode/
+.DS_Store
