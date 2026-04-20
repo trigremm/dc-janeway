@@ -1,6 +1,6 @@
-upstream/
 .env
 .docker_volumes/
+backend/janeway/
 .idea/
 .vscode/
 .DS_Store

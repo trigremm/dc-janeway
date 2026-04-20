@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:16-bookworm
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:?POSTGRES_DB must be set in .env}"
+      POSTGRES_USER: "${POSTGRES_USER:?POSTGRES_USER must be set in .env}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}"
+    restart: always
+    volumes:
+      - ./.docker_volumes/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  janeway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      DB_VENDOR: postgres
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: "${POSTGRES_DB}"
+      DB_USER: "${POSTGRES_USER}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD}"
+      JANEWAY_SETTINGS_MODULE: "${JANEWAY_SETTINGS_MODULE:-core.janeway_local_settings}"
+      SECRET_KEY: "${SECRET_KEY:?SECRET_KEY must be set in .env}"
+      DEBUG: "${DEBUG:-0}"
+      ALLOWED_HOSTS: "${ALLOWED_HOSTS:-localhost}"
+    ports:
+      - "127.0.0.1:${DC_JANEWAY_HTTP_PORT:-8090}:8000"
+    restart: always
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      # Janeway source, cloned on the host by `make janeway-install`.
+      # Editable live; gunicorn picks up .py changes on JANEWAY_HOT_RELOAD=true.
+      - ./backend/janeway:/app
+      - ./config/janeway_local_settings.py:/app/src/core/janeway_local_settings.py:ro
+      # Persisted media (uploads). STATIC_ROOT lives inside the bind-mounted
+      # Janeway source tree at backend/janeway/src/collected-static/ so it
+      # doesn't need its own mount.
+      - ./.docker_volumes/media:/app/src/media
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s

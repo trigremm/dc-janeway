@@ -1,102 +1,101 @@
 # dc-janeway
 
-Thin deployment wrapper around [Janeway](https://github.com/BirkbeckCTP/janeway) — the Django-based open-source scholarly publishing platform from Birkbeck, University of London.
+Docker Compose deployment of [Janeway](https://github.com/BirkbeckCTP/janeway) — the Django-based open-source scholarly publishing platform from Birkbeck, University of London.
 
-Unlike `dc-ojs`, this repo does **not** ship its own `docker-compose.yaml`. Janeway already has a production-grade Docker setup in its own repository; we clone it into `upstream/` and wrap its Makefile with our conventions (pinned ref, `.env` workflow, nginx reverse proxy, backups).
+Self-contained: ships its own `docker-compose.yaml`, `backend/Dockerfile`, and `backend/entrypoint.sh`. Janeway source is cloned on the host under `backend/janeway/` (editable, live-bound into the container), pinned by `JANEWAY_REF` in `.env`.
 
 ## TL;DR
 
 ```bash
-cp .env.sample .env          # edit passwords, pin JANEWAY_REF
-make bootstrap               # clones BirkbeckCTP/janeway into upstream/ at pinned ref
-make install                 # runs upstream installer (schema + initial press + admin)
-make up                      # start containers
-# open http://localhost:8090 → log in with JANEWAY_ADMIN_EMAIL / _PASSWORD
-```
-
-On crash: `make logs`; to rebuild: `make r`.
-
-## Commands
-
-### Upstream lifecycle
-
-```bash
-make bootstrap          # clone upstream at .env JANEWAY_REF
-make update-upstream    # git fetch + checkout the pinned ref
-make install            # upstream installer (first-run bootstrapping)
-```
-
-### Docker compose (proxied into upstream/)
-
-```bash
-make up                 # start containers
-make stop               # stop
-make down               # stop and remove
-make r                  # build + stop + up
-make logs               # tail logs
-make ps                 # list containers
-```
-
-### Maintenance
-
-```bash
-make janeway-migrate          # run Django migrations
-make janeway-createsuperuser  # create a Django superuser
-make janeway-collectstatic    # collectstatic
-make janeway-backup           # pg_dump into .docker_volumes/backups/
-make janeway-health           # curl the landing page
-```
-
-### Shell access
-
-```bash
-make janeway-shell       # bash into web container
-make janeway-db-shell    # psql
+cp .env.sample .env               # set POSTGRES_PASSWORD, SECRET_KEY, ALLOWED_HOSTS
+make janeway-install              # clone BirkbeckCTP/janeway into backend/janeway/
+make build                        # pip install Janeway's deps into the image
+make up                           # start db + janeway (entrypoint runs migrations)
+make janeway-setup                # install_janeway (initial press + admin)
+make janeway-createsuperuser
+# open http://localhost:8090
 ```
 
 ## Stack
 
-- Python 3.10+
-- Django 4.2
-- PostgreSQL (default; `DB_VENDOR` in upstream controls MySQL/SQLite alternatives)
-- Upstream provides its own gunicorn + Dockerfile; we don't touch that
+- Python 3.10 (slim-bookworm)
+- Django + gunicorn (3 workers by default)
+- PostgreSQL 16
+
+## Commands
+
+### Docker Compose
+
+| Target | What it does |
+|---|---|
+| `make up` / `stop` / `down` / `ps` / `logs` / `build` | wrappers around `docker compose` |
+| `make r` (recreate) | build + down + up |
+| `make rl` | recreate + tail logs |
+| `make shell` | bash into the `janeway` container |
+| `make deploy` | `git pull` + recreate + image/builder prune |
+
+### Janeway runtime
+
+| Target | What it does |
+|---|---|
+| `make janeway-install` | host: clone BirkbeckCTP/janeway into `backend/janeway/` at `JANEWAY_REF` |
+| `make janeway-update` | host: fetch + checkout new `JANEWAY_REF` in the existing clone |
+| `make janeway-setup` | container: run `install_janeway` (initial press + admin) |
+| `make janeway-migrate` | `python manage.py migrate` |
+| `make janeway-createsuperuser` | Django superuser prompt |
+| `make janeway-collectstatic` | `collectstatic --noinput` |
+| `make janeway-shell` | bash in app container |
+| `make janeway-db-shell` | psql against the db service |
+| `make janeway-backup` | `pg_dump` into `.docker_volumes/backups/` |
+| `make janeway-restore` | restore most recent backup |
+| `make janeway-health` | curl the host-proxied port |
+
+### nginx (public-facing host, not the container)
+
+| Target | What it does |
+|---|---|
+| `make nginx-add-janeway-asmo-su` | deploy vhost + certbot-issued cert + HTTPS redirect |
+| `make nginx-remove-janeway-asmo-su` | remove vhost, reload |
+| `make nginx-status` | show enabled/available state for tracked vhosts |
+
+### Bootstrap helpers
+
+| Target | What it prints |
+|---|---|
+| `make howto-deploy` | copy-paste SSH-key + clone commands for a fresh host |
+| `make howto-up` | copy-paste `.env` setup + `make up` + install commands |
 
 ## Structure
 
-- `Makefile` / `makefiles/` — wrappers around upstream's Make targets
-- `upstream/` — gitignored clone of [BirkbeckCTP/janeway](https://github.com/BirkbeckCTP/janeway), pinned by `JANEWAY_REF` in `.env`
-- `x_nginx/` — host-level nginx reverse proxy configs for `janeway.asmo.su`
-- `.docker_volumes/backups/` — Postgres dumps from `make janeway-backup` (gitignored)
+- `docker-compose.yaml` — `db` (postgres:16) + `janeway` (our built image) services
+- `backend/Dockerfile` — Python + system libs, pip installs deps from `backend/janeway/requirements.txt`
+- `backend/entrypoint.sh` — migrations + `collectstatic` + gunicorn / uvicorn; mode-switched by `JANEWAY_HOT_RELOAD`
+- `backend/janeway/` — Janeway source clone (gitignored; populated by `make janeway-install`)
+- `config/janeway_local_settings.py` — bind-mounted Django settings overrides
+- `makefiles/` — fragments by topic, all explicitly included in the root `Makefile`
+- `x_nginx/` — host-level nginx vhost for `janeway.asmo.su` (HTTP-only; certbot adds TLS)
+- `.docker_volumes/` — bind-mounted volumes (gitignored): `db/`, `media/`, `static_collected/`, `backups/`
 
-## Why "thin wrapper"?
+## Customising Janeway
 
-Janeway already ships a well-maintained `docker-compose.yml` and `Makefile` in its repo. Forking them would mean chasing upstream changes forever. Instead:
+The entire Janeway tree is at `backend/janeway/` on the host — edit freely. Container sees changes live via bind mount. For Python source changes set `JANEWAY_HOT_RELOAD=true` in `.env` to use `runserver`, or restart the container for gunicorn to pick them up.
 
-1. `.env` here drives the setup (port, DB creds, admin, pinned `JANEWAY_REF`)
-2. `make bootstrap` clones upstream at the pinned ref and symlinks `.env` into `upstream/`
-3. All Docker operations (`up`, `stop`, `logs`, etc.) `cd upstream && docker compose ...`
-4. Upgrades: bump `JANEWAY_REF` in `.env`, `make update-upstream && make r && make janeway-migrate`
+## Upgrading Janeway
 
-## nginx reverse proxy
+1. Bump `JANEWAY_REF` in `.env`
+2. `make janeway-update` — fetch + checkout the new ref in `backend/janeway/`
+3. `make build && make r` — rebuild image with the new `requirements.txt`
+4. `make janeway-migrate && make janeway-collectstatic`
 
-Ready config in [`x_nginx/janeway.asmo.su.conf`](x_nginx/janeway.asmo.su.conf). Install:
+## Security checklist
 
-```bash
-sudo cp x_nginx/janeway.asmo.su.conf /etc/nginx/sites-available/
-sudo ln -s /etc/nginx/sites-available/janeway.asmo.su.conf /etc/nginx/sites-enabled/
-sudo certbot certonly --nginx -d janeway.asmo.su
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-## Security quick checklist
-
-- [ ] Rotate `POSTGRES_PASSWORD`, `SECRET_KEY`, `JANEWAY_ADMIN_PASSWORD` in `.env`
+- [ ] `SECRET_KEY` generated with `openssl rand -hex 32`
+- [ ] `POSTGRES_PASSWORD` rotated from the sample default
+- [ ] `DEBUG=0` and `ALLOWED_HOSTS=janeway.asmo.su` for production
 - [ ] `chmod 600 .env`
-- [ ] Generate `SECRET_KEY`: `openssl rand -hex 32`
-- [ ] Set `DEBUG=0` and `ALLOWED_HOSTS=janeway.asmo.su` in `.env`
-- [ ] Put nginx with TLS in front (see above)
-- [ ] `make janeway-backup` on cron
+- [ ] nginx + Let's Encrypt in front (`make nginx-add-janeway-asmo-su`)
+- [ ] `make janeway-backup` scheduled via cron
 
 ## License
 
-MIT — see upstream Janeway's license ([AGPL-3.0](https://github.com/BirkbeckCTP/janeway/blob/master/LICENSE)) for the cloned code in `upstream/`.
+Upstream Janeway is [AGPL-3.0](https://github.com/BirkbeckCTP/janeway/blob/master/LICENSE); this wrapper is MIT.
