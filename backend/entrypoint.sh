@@ -11,8 +11,10 @@ case "$(echo "${JANEWAY_MIGRATE_ON_BOOT:-true}" | tr '[:upper:]' '[:lower:]')" i
     ;;
 esac
 
-# Optional: collectstatic on boot
-case "$(echo "${JANEWAY_COLLECTSTATIC_ON_BOOT:-true}" | tr '[:upper:]' '[:lower:]')" in
+# Optional: collectstatic on boot. OFF by default — re-copying thousands of
+# static files on every restart is slow and rarely needed. Enable per-boot with
+# RUN_COLLECTSTATIC=true, or run `make janeway-collectstatic` when assets change.
+case "$(echo "${RUN_COLLECTSTATIC:-false}" | tr '[:upper:]' '[:lower:]')" in
   true|1|yes)
     echo "Collecting static files..."
     python manage.py collectstatic --noinput
