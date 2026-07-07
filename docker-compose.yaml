@@ -56,7 +56,9 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/"]
+      # -L follows redirects: an uninstalled/press-less root returns a 3xx,
+      # which without -L curl treats as success and masks a broken app.
+      test: ["CMD", "curl", "-fsSL", "http://localhost:8000/"]
       interval: 30s
       timeout: 5s
       retries: 3

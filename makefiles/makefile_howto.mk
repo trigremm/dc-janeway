@@ -20,3 +20,4 @@ howto-up:
 	@echo 'make up               # start db + janeway (entrypoint runs migrations)'
 	@echo 'make janeway-setup    # install_janeway (initial press + admin)'
 	@echo 'make janeway-createsuperuser'
+	@echo 'make janeway-collectstatic  # REQUIRED once: populate /static/ for nginx (boot no longer collects)'

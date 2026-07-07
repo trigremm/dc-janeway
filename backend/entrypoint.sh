@@ -39,6 +39,7 @@ case "$(echo "$JANEWAY_HOT_RELOAD" | tr '[:upper:]' '[:lower:]')" in
     echo "#############################"
     exec gunicorn core.wsgi:application \
       --bind 0.0.0.0:8000 \
+      --worker-tmp-dir /dev/shm \
       --workers "$WORKERS" \
       --timeout 60 \
       --graceful-timeout 20 \
