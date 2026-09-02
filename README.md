@@ -77,12 +77,12 @@ make janeway-collectstatic        # REQUIRED once — see "Static assets" below
 
 - `docker-compose.yaml` — `db` (postgres:16) + `janeway` (our built image) services
 - `backend/Dockerfile` — Python + system libs, pip installs deps from `backend/janeway/requirements.txt`
-- `backend/entrypoint.sh` — migrations + `collectstatic` + gunicorn / uvicorn; mode-switched by `JANEWAY_HOT_RELOAD`
+- `backend/entrypoint.sh` — migrations (`JANEWAY_MIGRATE_ON_BOOT`, default on), optional `collectstatic` (`RUN_COLLECTSTATIC`, default off), then gunicorn (`GUNICORN_WORKERS`, default 3) or `runserver` when `JANEWAY_HOT_RELOAD=true`
 - `backend/janeway/` — Janeway source clone (gitignored; populated by `make janeway-install`)
 - `config/janeway_local_settings.py` — bind-mounted Django settings overrides
 - `makefiles/` — fragments by topic, all explicitly included in the root `Makefile`
 - `x_nginx/` — host-level nginx vhost for `janeway.asmo.su` (HTTP-only; certbot adds TLS)
-- `.docker_volumes/` — bind-mounted volumes (gitignored): `db/`, `media/`, `static_collected/`, `backups/`
+- `.docker_volumes/` — bind-mounted volumes (gitignored): `db/`, `media/`, `backups/`; collected static lives in `backend/janeway/src/collected-static/`
 
 ## Customising Janeway
 
