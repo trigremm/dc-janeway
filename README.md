@@ -34,13 +34,14 @@ make janeway-collectstatic        # REQUIRED once — see "Static assets" below
 
 ### Docker Compose
 
-| Target                                                | What it does                                |
-| ----------------------------------------------------- | ------------------------------------------- |
-| `make up` / `stop` / `down` / `ps` / `logs` / `build` | wrappers around `docker compose`            |
-| `make r` (recreate)                                   | build + down + up                           |
-| `make rl`                                             | recreate + tail logs                        |
-| `make shell`                                          | bash into the `janeway` container           |
-| `make deploy`                                         | `git pull` + recreate + image/builder prune |
+| Target                                                | What it does                                                   |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| `make up` / `stop` / `down` / `ps` / `logs` / `build` | wrappers around `docker compose`                               |
+| `make r` (recreate)                                   | build + down + up                                              |
+| `make rl`                                             | recreate + tail logs                                           |
+| `make shell`                                          | bash into the `janeway` container                              |
+| `make deploy` / `make d`                              | `git pull` + recreate + image/builder prune                    |
+| `make ssh`                                            | `ssh test-asmo-server` (host shortcut hardcoded in `Makefile`) |
 
 ### Janeway runtime
 
@@ -65,6 +66,14 @@ make janeway-collectstatic        # REQUIRED once — see "Static assets" below
 | `make nginx-add-janeway-asmo-su`    | deploy vhost + certbot-issued cert + HTTPS redirect |
 | `make nginx-remove-janeway-asmo-su` | remove vhost, reload                                |
 | `make nginx-status`                 | show enabled/available state for tracked vhosts     |
+
+### Formatting and linting
+
+| Target                   | What it does                                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `make format` / `make f` | prettier on tracked md/yaml/json, shfmt on `*.sh` — each step skipped if the tool is not installed    |
+| `make format-check`      | prettier `--check`, fails if unformatted (or prettier missing)                                        |
+| `make lint`              | hadolint on tracked Dockerfiles and other linters when installed (see `makefiles/makefile_format.mk`) |
 
 ### Bootstrap helpers
 
