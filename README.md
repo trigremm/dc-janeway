@@ -13,8 +13,16 @@ make build                        # pip install Janeway's deps into the image
 make up                           # start db + janeway (entrypoint runs migrations)
 make janeway-setup                # install_janeway (initial press + admin)
 make janeway-createsuperuser
+make janeway-collectstatic        # REQUIRED once — see "Static assets" below
 # open http://localhost:8090
 ```
+
+> **Static assets — run `make janeway-collectstatic` once after first `up`.**
+> The container entrypoint no longer runs `collectstatic` on boot (it is gated
+> behind `RUN_COLLECTSTATIC`, default OFF), and nginx serves `/static/` straight
+> off disk from `backend/janeway/src/collected-static/`. Until that directory is
+> populated, every `/static/` asset 404s. Re-run it after any static-affecting
+> Janeway upgrade (already listed in [Upgrading Janeway](#upgrading-janeway)).
 
 ## Stack
 
@@ -26,55 +34,64 @@ make janeway-createsuperuser
 
 ### Docker Compose
 
-| Target | What it does |
-|---|---|
-| `make up` / `stop` / `down` / `ps` / `logs` / `build` | wrappers around `docker compose` |
-| `make r` (recreate) | build + down + up |
-| `make rl` | recreate + tail logs |
-| `make shell` | bash into the `janeway` container |
-| `make deploy` | `git pull` + recreate + image/builder prune |
+| Target                                                | What it does                                                   |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| `make up` / `stop` / `down` / `ps` / `logs` / `build` | wrappers around `docker compose`                               |
+| `make r` (recreate)                                   | build + down + up                                              |
+| `make rl`                                             | recreate + tail logs                                           |
+| `make shell`                                          | bash into the `janeway` container                              |
+| `make deploy` / `make d`                              | `git pull` + recreate + image/builder prune                    |
+| `make ssh`                                            | `ssh test-asmo-server` (host shortcut hardcoded in `Makefile`) |
 
 ### Janeway runtime
 
-| Target | What it does |
-|---|---|
-| `make janeway-install` | host: clone BirkbeckCTP/janeway into `backend/janeway/` at `JANEWAY_REF` |
-| `make janeway-update` | host: fetch + checkout new `JANEWAY_REF` in the existing clone |
-| `make janeway-setup` | container: run `install_janeway` (initial press + admin) |
-| `make janeway-migrate` | `python manage.py migrate` |
-| `make janeway-createsuperuser` | Django superuser prompt |
-| `make janeway-collectstatic` | `collectstatic --noinput` |
-| `make janeway-shell` | bash in app container |
-| `make janeway-db-shell` | psql against the db service |
-| `make janeway-backup` | `pg_dump` into `.docker_volumes/backups/` |
-| `make janeway-restore` | restore most recent backup |
-| `make janeway-health` | curl the host-proxied port |
+| Target                         | What it does                                                                                                                                                      |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `make janeway-install`         | host: clone BirkbeckCTP/janeway into `backend/janeway/` at `JANEWAY_REF`                                                                                          |
+| `make janeway-update`          | host: fetch + checkout new `JANEWAY_REF` in the existing clone                                                                                                    |
+| `make janeway-setup`           | container: run `install_janeway` (initial press + admin)                                                                                                          |
+| `make janeway-migrate`         | `python manage.py migrate`                                                                                                                                        |
+| `make janeway-createsuperuser` | Django superuser prompt                                                                                                                                           |
+| `make janeway-collectstatic`   | `collectstatic --noinput` — **required once after first `up`** (boot no longer collects; nginx serves `/static/` off disk) and after any static-affecting upgrade |
+| `make janeway-shell`           | bash in app container                                                                                                                                             |
+| `make janeway-db-shell`        | psql against the db service                                                                                                                                       |
+| `make janeway-backup`          | `pg_dump` into `.docker_volumes/backups/`                                                                                                                         |
+| `make janeway-restore`         | restore most recent backup                                                                                                                                        |
+| `make janeway-health`          | curl the host-proxied port                                                                                                                                        |
 
 ### nginx (public-facing host, not the container)
 
-| Target | What it does |
-|---|---|
-| `make nginx-add-janeway-asmo-su` | deploy vhost + certbot-issued cert + HTTPS redirect |
-| `make nginx-remove-janeway-asmo-su` | remove vhost, reload |
-| `make nginx-status` | show enabled/available state for tracked vhosts |
+| Target                              | What it does                                        |
+| ----------------------------------- | --------------------------------------------------- |
+| `make nginx-add-janeway-asmo-su`    | deploy vhost + certbot-issued cert + HTTPS redirect |
+| `make nginx-remove-janeway-asmo-su` | remove vhost, reload                                |
+| `make nginx-status`                 | show enabled/available state for tracked vhosts     |
+
+### Formatting and linting
+
+| Target                   | What it does                                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `make format` / `make f` | prettier on tracked md/yaml/json, shfmt on `*.sh` — each step skipped if the tool is not installed    |
+| `make format-check`      | prettier `--check`, fails if unformatted (or prettier missing)                                        |
+| `make lint`              | hadolint on tracked Dockerfiles and other linters when installed (see `makefiles/makefile_format.mk`) |
 
 ### Bootstrap helpers
 
-| Target | What it prints |
-|---|---|
-| `make howto-deploy` | copy-paste SSH-key + clone commands for a fresh host |
-| `make howto-up` | copy-paste `.env` setup + `make up` + install commands |
+| Target              | What it prints                                         |
+| ------------------- | ------------------------------------------------------ |
+| `make howto-deploy` | copy-paste SSH-key + clone commands for a fresh host   |
+| `make howto-up`     | copy-paste `.env` setup + `make up` + install commands |
 
 ## Structure
 
 - `docker-compose.yaml` — `db` (postgres:16) + `janeway` (our built image) services
 - `backend/Dockerfile` — Python + system libs, pip installs deps from `backend/janeway/requirements.txt`
-- `backend/entrypoint.sh` — migrations + `collectstatic` + gunicorn / uvicorn; mode-switched by `JANEWAY_HOT_RELOAD`
+- `backend/entrypoint.sh` — migrations (`JANEWAY_MIGRATE_ON_BOOT`, default on), optional `collectstatic` (`RUN_COLLECTSTATIC`, default off), then gunicorn (`GUNICORN_WORKERS`, default 3) or `runserver` when `JANEWAY_HOT_RELOAD=true`
 - `backend/janeway/` — Janeway source clone (gitignored; populated by `make janeway-install`)
 - `config/janeway_local_settings.py` — bind-mounted Django settings overrides
 - `makefiles/` — fragments by topic, all explicitly included in the root `Makefile`
 - `x_nginx/` — host-level nginx vhost for `janeway.asmo.su` (HTTP-only; certbot adds TLS)
-- `.docker_volumes/` — bind-mounted volumes (gitignored): `db/`, `media/`, `static_collected/`, `backups/`
+- `.docker_volumes/` — bind-mounted volumes (gitignored): `db/`, `media/`, `backups/`; collected static lives in `backend/janeway/src/collected-static/`
 
 ## Customising Janeway
 
@@ -85,7 +102,7 @@ The entire Janeway tree is at `backend/janeway/` on the host — edit freely. Co
 1. Bump `JANEWAY_REF` in `.env`
 2. `make janeway-update` — fetch + checkout the new ref in `backend/janeway/`
 3. `make build && make r` — rebuild image with the new `requirements.txt`
-4. `make janeway-migrate && make janeway-collectstatic`
+4. `make janeway-migrate && make janeway-collectstatic` (collectstatic is required — nginx serves `/static/` off disk and boot no longer collects)
 
 ## Security checklist
 
