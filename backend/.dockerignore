@@ -1,0 +1,23 @@
+# Build context is ./backend (per docker-compose.yaml `build.context`).
+# The Dockerfile only COPYs `janeway/requirements.txt` and `entrypoint.sh`,
+# so keep the multi-hundred-MB Janeway clone (and its .git) out of the context
+# that gets shipped to the Docker daemon on every build, then re-include the one
+# file the build actually needs.
+janeway/**
+!janeway/requirements.txt
+
+# Belt-and-suspenders: never ship VCS / caches / editor / build noise even if
+# the paths above change.
+**/.git
+**/node_modules
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.docker_volumes
+.env
+.env.*
+
+# Not needed inside the build context.
+Dockerfile
+.dockerignore

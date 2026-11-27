@@ -2,10 +2,12 @@
 # Janeway runtime + source-tree management.
 #
 # Flow on a fresh host:
-#   1) make janeway-install   — clones BirkbeckCTP/janeway into backend/janeway/
-#   2) make build             — Dockerfile pip-installs from that requirements.txt
-#   3) make up                — source is bind-mounted; entrypoint runs migrations + gunicorn
-#   4) make janeway-setup     — run install_janeway (initial press + admin)
+#   1) make janeway-install       — clones BirkbeckCTP/janeway into backend/janeway/
+#   2) make build                 — Dockerfile pip-installs from that requirements.txt
+#   3) make up                    — source is bind-mounted; entrypoint runs migrations + gunicorn
+#   4) make janeway-setup         — run install_janeway (initial press + admin)
+#   5) make janeway-collectstatic — REQUIRED once: populate collected-static/ so
+#                                   nginx can serve /static/ off disk (see target below)
 
 JANEWAY_REPO := https://github.com/BirkbeckCTP/janeway.git
 JANEWAY_SRC  := backend/janeway
@@ -57,6 +59,12 @@ janeway-setup:
 janeway-migrate:
 	$(EXEC_APP_T) python manage.py migrate
 
+# REQUIRED one-time deploy step. The entrypoint no longer runs collectstatic on
+# boot (gated behind RUN_COLLECTSTATIC, default OFF) and nginx serves /static/
+# straight off disk from collected-static/. So this must be run ONCE after the
+# first `make up` and again after any static-affecting Janeway upgrade, or every
+# /static/ asset 404s. Runs the management command directly against the running
+# container (does not depend on the RUN_COLLECTSTATIC entrypoint gate).
 janeway-collectstatic:
 	$(EXEC_APP_T) python manage.py collectstatic --noinput
 

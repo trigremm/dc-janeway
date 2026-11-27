@@ -13,8 +13,16 @@ make build                        # pip install Janeway's deps into the image
 make up                           # start db + janeway (entrypoint runs migrations)
 make janeway-setup                # install_janeway (initial press + admin)
 make janeway-createsuperuser
+make janeway-collectstatic        # REQUIRED once — see "Static assets" below
 # open http://localhost:8090
 ```
+
+> **Static assets — run `make janeway-collectstatic` once after first `up`.**
+> The container entrypoint no longer runs `collectstatic` on boot (it is gated
+> behind `RUN_COLLECTSTATIC`, default OFF), and nginx serves `/static/` straight
+> off disk from `backend/janeway/src/collected-static/`. Until that directory is
+> populated, every `/static/` asset 404s. Re-run it after any static-affecting
+> Janeway upgrade (already listed in [Upgrading Janeway](#upgrading-janeway)).
 
 ## Stack
 
@@ -43,7 +51,7 @@ make janeway-createsuperuser
 | `make janeway-setup` | container: run `install_janeway` (initial press + admin) |
 | `make janeway-migrate` | `python manage.py migrate` |
 | `make janeway-createsuperuser` | Django superuser prompt |
-| `make janeway-collectstatic` | `collectstatic --noinput` |
+| `make janeway-collectstatic` | `collectstatic --noinput` — **required once after first `up`** (boot no longer collects; nginx serves `/static/` off disk) and after any static-affecting upgrade |
 | `make janeway-shell` | bash in app container |
 | `make janeway-db-shell` | psql against the db service |
 | `make janeway-backup` | `pg_dump` into `.docker_volumes/backups/` |
@@ -85,7 +93,7 @@ The entire Janeway tree is at `backend/janeway/` on the host — edit freely. Co
 1. Bump `JANEWAY_REF` in `.env`
 2. `make janeway-update` — fetch + checkout the new ref in `backend/janeway/`
 3. `make build && make r` — rebuild image with the new `requirements.txt`
-4. `make janeway-migrate && make janeway-collectstatic`
+4. `make janeway-migrate && make janeway-collectstatic` (collectstatic is required — nginx serves `/static/` off disk and boot no longer collects)
 
 ## Security checklist
 
